@@ -1,0 +1,15 @@
+#Exception handling
+#performance - http is the lighteset and fastest http communicatiion library
+# connection-test
+# the first request is always slow, since DNS resolution & caching is needed,
+# TCP handshaking and python http.client resource initialization.
+# so before measuring the time, we make a dummy request
+# to warm up the connection
+    try_pass("!")
+
+
+usobopdjrcvbvmfv
+usobopdjrcvbqdgz
+usobopdjrcvbvmfb
+usobopdjrcvbvmfa
+usobopdjrcvbvmfo
