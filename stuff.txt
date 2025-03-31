@@ -8,8 +8,13 @@
     try_pass("!")
 
 
-usobopdjrcvbvmfv
-usobopdjrcvbqdgz
-usobopdjrcvbvmfb
-usobopdjrcvbvmfa
-usobopdjrcvbvmfo
+difficulty1:
+    usobopdjrcvbvmfv
+    usobopdjrcvbqdgz
+    usobopdjrcvbvmfb
+    usobopdjrcvbvmfa
+    usobopdjrcvbvmfo
+    usobopdjrcvbvmfr
+    Password so far: usobopdjrcvbvmft
+
+difficulty3:
