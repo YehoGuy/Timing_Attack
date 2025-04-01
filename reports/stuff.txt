@@ -12,6 +12,7 @@
 difficulty1:  usobopdjrcvbvmfz
     26 threads - 7.6 min
     50 threads - 3.96 min
+    100 threads - 2.2 min
 
 difficulty2:  sbvxtgnwkozgzaph
 
@@ -20,9 +21,7 @@ difficulty3:  jsbmovoffrgxabbc
 difficulty4:  yyrrpupqwavwulhe
 
 difficulty5:  lislugbrkfbkpjtd
+    100 threads - 2.69 min
 
-difficulty6:  
-    pqwkljttpgoqyzqa
-    pqsusmanegjorgpa
-    pqsusmbgqkigeina
-    pqsusmbgqkiaxxca
+difficulty6:  pqsusmbgqkiaxxjz
+    100 threads - 2.8 min
