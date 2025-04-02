@@ -1,7 +1,7 @@
 import urllib.parse
 import time
 from concurrent.futures import ThreadPoolExecutor
-from ThreadSafeCounter import ThreadSafeTimeTracker
+from Timer import CharTimer
 from decimal import Decimal, getcontext
 import pycurl
 import io
@@ -107,7 +107,7 @@ def crack_next_char(discovered_length, executor):
     # to warm up the connection
     try_pass2("!")
     r = 1 if LENGTH - discovered_length == 1 else num_repetitions(discovered_length)
-    counter = ThreadSafeTimeTracker()
+    counter = CharTimer()
     parts = split_charset()
     futures = []
     for round in range(r):
@@ -117,7 +117,7 @@ def crack_next_char(discovered_length, executor):
     # the previous one to finish
     for future in futures:
         future.result()
-    return counter.get_max_letter()
+    return counter.get_max_avg_letter()
     
 
 def worker(discovered_length, counter):

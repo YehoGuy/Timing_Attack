@@ -1,0 +1,3 @@
+docker pull amarmic/attacks_on_implementations:Assignment1_amd_arm
+
+docker run -p 80:8080 amarmic/attacks_on_implementations:Assignment1_amd_arm

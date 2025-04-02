@@ -25,3 +25,38 @@ difficulty5:  lislugbrkfbkpjtd
 
 difficulty6:  pqsusmbgqkiaxxjz
     100 threads - 2.8 min
+
+difficulty7:  emaglsuyvonzyhsy
+    time - 2.3
+
+difficulty8:  ittnycwrgytsiasj
+    time - 2.18
+
+difficulty9:  tfeylsjeqrotadhp
+    time - 2.05
+
+difficulty10:  bcttovgtzyiiblsy
+    time - 1.92
+
+difficulty11:  jnvxobhyqlzlmlwb
+    time - 1.749
+
+difficulty12:  biqmxrlyrvdxbivd
+    time - 2.12
+
+difficulty13:  gfmxrshcqvviavpb
+    time - 
+
+difficulty14:  
+    time -  4.458
+
+difficulty15:  
+    time - 
+
+difficulty16:  bcvdzjeipgubkozx
+    time - 3.08
+
+difficulty20:  
+    bdcjjpmledgefrra
+    bdconvrzgznotlla
+    bdcjjcrftrxtztua

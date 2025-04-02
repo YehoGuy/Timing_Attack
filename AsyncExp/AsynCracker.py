@@ -1,6 +1,6 @@
 import urllib.parse
 import time
-from Counter import Counter
+from AsyncExp.Counter import Counter
 from decimal import Decimal, getcontext
 import pycurl
 import io
