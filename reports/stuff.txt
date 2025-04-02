@@ -56,7 +56,8 @@ difficulty15:
 difficulty16:  bcvdzjeipgubkozx
     time - 3.08
 
-difficulty20:  
-    bdcjjpmledgefrra
-    bdconvrzgznotlla
-    bdcjjcrftrxtztua
+difficulty17:  qssqksoxlogsjcfe
+    time - 4.6
+
+difficulty20:  bdcjjnqammzzcomc
+    time - 6.04
