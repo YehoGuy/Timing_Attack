@@ -18,13 +18,21 @@ class CharTimer:
         getcontext().prec = 30
         self.trim_percentage = trim_percentage  # e.g. 0.2 for top 20%
 
+
     def record_time(self, letter, amount):
+        """
+        Record a timing measurement for a specific letter.
+        The amount is converted to Decimal for precision.
+        """
         amount = Decimal(amount)
         with self._locks[letter]:
             self._times[letter].append(amount)
     
+
     def _trimmed_mean(self, measurements):
-        """Calculate the trimmed mean, discarding the highest trim_percentage."""
+        """
+        Calculate the trimmed mean, discarding the highest trim_percentage.
+        """
         if not measurements:
             return Decimal(0)
         # Sort the measurements.
@@ -38,7 +46,11 @@ class CharTimer:
         # Convert Decimal to float for statistics.mean, then back to Decimal.
         return Decimal(statistics.mean([float(x) for x in trimmed]))
     
+
     def get_max_letter(self):
+        """
+        Get the letter with the maximum trimmed mean time.
+        """
         # Acquire all per-letter locks in a consistent order.
         with ExitStack() as stack:
             for letter in sorted(self._locks):
