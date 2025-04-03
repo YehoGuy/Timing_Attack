@@ -50,7 +50,7 @@ difficulty13:  gfmxrshcqvviavpb
 difficulty14:  
     time -  4.458
 
-difficulty15:  
+difficulty15:  jsvvcebmfqwhxrbp
     time - 
 
 difficulty16:  bcvdzjeipgubkozx
@@ -60,4 +60,9 @@ difficulty17:  qssqksoxlogsjcfe
     time - 4.6
 
 difficulty20:  bdcjjnqammzzcomc
-    time - 6.04
+    time - 6.04 on colab
+
+difficulty21:   lzbsiyzfofusdkr
+                lzbsiyzfofusdkp
+                lzbsiyzfofusdkza
+    time - 
