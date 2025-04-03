@@ -4,30 +4,31 @@ from contextlib import ExitStack
 from decimal import Decimal, getcontext
 import statistics
 
-class CharTimer:
+class ThreadSafeTimer:
     """
-    A class to record and analyze timing measurements for each letter.
+    A class to record and analyze timing measurements.
     It uses a trimmed mean to reduce the impact of outliers.
     The trimmed mean is calculated by discarding the highest
     `trim_percentage` of the measurements, which probably includes all the outliers.
     """
-    def __init__(self, trim_percentage=0.05):
+    def __init__(self, keyset, trim_percentage=0.05):
         # Store all measurements for each letter.
-        self._times = {letter: [] for letter in string.ascii_lowercase}
-        self._locks = {letter: threading.Lock() for letter in string.ascii_lowercase}
+        self._keyset=keyset
+        self._times = {key: [] for key in keyset}
+        self._locks = {key: threading.Lock() for key in keyset}
         getcontext().prec = 30
         self.trim_percentage = trim_percentage  # e.g. 0.2 for top 20%
 
 
-    def record_time(self, letter, amount):
+    def record_time(self, key, amount):
         """
-        Record a timing measurement for a specific letter.
+        Record a timing measurement for a specific key.
         The amount is converted to Decimal for precision.
         """
         amount = Decimal(amount)
-        with self._locks[letter]:
-            self._times[letter].append(amount)
-    
+        with self._locks[key]:
+            self._times[key].append(amount)
+
 
     def _trimmed_mean(self, measurements):
         """
@@ -45,21 +46,21 @@ class CharTimer:
         # Use statistics.mean on the trimmed list
         # Convert Decimal to float for statistics.mean, then back to Decimal.
         return Decimal(statistics.mean([float(x) for x in trimmed]))
-    
 
-    def get_max_letter(self):
+
+    def get_max_mean_key(self):
         """
-        Get the letter with the maximum trimmed mean time.
+        Get the key with the maximum trimmed mean time.
         """
-        # Acquire all per-letter locks in a consistent order.
+        # Acquire all per-key locks in a consistent order.
         with ExitStack() as stack:
-            for letter in sorted(self._locks):
-                stack.enter_context(self._locks[letter])
-            max_letter = None
+            for key in sorted(self._locks):
+                stack.enter_context(self._locks[key])
+            max_key = None
             max_trimmed_mean = Decimal('-inf')
-            for letter in string.ascii_lowercase:
-                tm = self._trimmed_mean(self._times[letter])
+            for key in self._keyset:
+                tm = self._trimmed_mean(self._times[key])
                 if tm > max_trimmed_mean:
                     max_trimmed_mean = tm
-                    max_letter = letter
-            return max_letter, max_trimmed_mean
+                    max_key = key
+            return max_key, max_trimmed_mean
