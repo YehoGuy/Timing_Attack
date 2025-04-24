@@ -95,7 +95,8 @@ def try_pass(password):
     server_ns = int((startxfer - prexfer) * 1e9)
     # Subtract any global baseline jitter
     baseline = globals().get("NETWORK_BASELINE_NS", 0)
-    corrected_ns = max(0, server_ns - baseline)
+    if(server_ns > baseline):
+      corrected_ns = max(0, server_ns - baseline)
 
     # Determine if the server returned "1"
     body = buffer.getvalue().strip()
