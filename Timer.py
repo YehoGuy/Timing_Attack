@@ -1,7 +1,6 @@
 import threading
 import string
 from contextlib import ExitStack
-from decimal import Decimal, getcontext
 import statistics
 
 class ThreadSafeTimer:
@@ -16,7 +15,6 @@ class ThreadSafeTimer:
         self._keyset=keyset
         self._times = {key: [] for key in keyset}
         self._locks = {key: threading.Lock() for key in keyset}
-        getcontext().prec = 30
         self.trim_percentage = trim_percentage  # e.g. 0.2 for top 20%
 
 
@@ -25,7 +23,6 @@ class ThreadSafeTimer:
         Record a timing measurement for a specific key.
         The amount is converted to Decimal for precision.
         """
-        amount = Decimal(amount)
         with self._locks[key]:
             self._times[key].append(amount)
 
@@ -35,7 +32,7 @@ class ThreadSafeTimer:
         Calculate the trimmed mean, discarding the highest trim_percentage.
         """
         if not measurements:
-            return Decimal(0)
+            return 0
         # Sort the measurements.
         sorted_times = sorted(measurements)
         n = len(sorted_times)
@@ -45,7 +42,7 @@ class ThreadSafeTimer:
         trimmed = sorted_times[:n - trim_count] if n - trim_count > 0 else sorted_times
         # Use statistics.mean on the trimmed list
         # Convert Decimal to float for statistics.mean, then back to Decimal.
-        return Decimal(statistics.mean([float(x) for x in trimmed]))
+        return statistics.mean([float(x) for x in trimmed])
 
 
     def get_max_mean_key(self):
@@ -57,7 +54,7 @@ class ThreadSafeTimer:
             for key in sorted(self._locks):
                 stack.enter_context(self._locks[key])
             max_key = None
-            max_trimmed_mean = Decimal('-inf')
+            max_trimmed_mean = 0
             for key in self._keyset:
                 tm = self._trimmed_mean(self._times[key])
                 if tm > max_trimmed_mean:
