@@ -228,8 +228,9 @@ def main():
         except Exception as e:
           print(f"\n[ERROR] - {e}")
           print("trying again...")
+          PASSWORD = ""
+          discovered_length=0
           time.sleep(3)
-          clear_output()
         finally:
           attempt += 1
 
