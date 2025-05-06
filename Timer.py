@@ -54,7 +54,7 @@ class ThreadSafeTimer:
             for key in sorted(self._locks):
                 stack.enter_context(self._locks[key])
             max_key = None
-            max_trimmed_mean = 0
+            max_trimmed_mean = float('-inf')
             for key in self._keyset:
                 tm = self._trimmed_mean(self._times[key])
                 if tm > max_trimmed_mean:

