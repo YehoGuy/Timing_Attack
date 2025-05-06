@@ -1,7 +1,7 @@
 # ⚡ Timing‑Attack Password Cracker
 
 A proof‑of‑concept Attack showing how **server‑side timing leaks** can reveal a user’s password.  
-This hackathon challenge involved of me guessing the password rewuired to log into a web server.
+This hackathon's challenge is Cracking the password required to log into a web server.
 The Server requires a USERNAME & a PASSWORD to log in. additionaly it requires a DIFFICULTY parameter that makes this challenge harder and harder.
 
 ---
@@ -33,6 +33,13 @@ BUT, we have one more PROBLEM, NOISE!
 there is a ton of noise in the time measurment, request setup, DNS lookup, delays, losses...
 For that I measure a lot of measurements for each possible character, and at the end compare the TRIMMED_MEAN statistic for each character, 
 and take the char with the maximum result.
+
+
+## Efficiency
+For a password of length 16, with a charset sized 26,
+**Bruteforce** will take about 26^16 attempts which is around **639,909,179,494,039,552 attempts**.
+My Timing attack takes exactly **4562** attempts for **difficulty 1**, 
+and **378,026 attempts** for **difficulty 20**.
 
 
 Guy Yehoshua.
