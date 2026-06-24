@@ -42,5 +42,5 @@ My Timing attack takes exactly **4562** attempts for **difficulty 1**,
 and **378,026 attempts** for **difficulty 20**.
 
 
-Guy Yehoshua.
+B.Sc. Guy Yehoshua.
 
